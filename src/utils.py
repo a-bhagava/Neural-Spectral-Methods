@@ -42,8 +42,8 @@ def cmap(f: Fx, n: int = None, **kwargs) -> Fx:
     f = jax.vmap(f, **kwargs)
     def call(*args, **kwargs):
 
-        return jax.tree_map(np.concatenate, jax.lax.map(f, *jax.tree_map(into:=lambda x:
-                   x.reshape(-1, n, *x.shape[1:]), args), **jax.tree_map(into, kwargs)))
+        return jax.tree.map(np.concatenate, jax.lax.map(f, *jax.tree.map(into:=lambda x:
+                   x.reshape(-1, n, *x.shape[1:]), args), **jax.tree.map(into, kwargs)))
 
     if n is None: return f
 
@@ -88,7 +88,7 @@ def timeit(f: Fx, **options) -> Fx:
         import time
         iter = time.time()
 
-        jax.tree_map(jax.block_until_ready,
+        jax.tree.map(jax.block_until_ready,
                      fjit(*args, **kwargs))
 
         return time.time() - iter

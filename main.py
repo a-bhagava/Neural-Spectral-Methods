@@ -74,7 +74,7 @@ def main(cfg: Dict[str, Any]):
             import time
             rate = time.time()
 
-            (variable, loss), state = jax.tree_map(jax.block_until_ready,
+            (variable, loss), state = jax.tree.map(jax.block_until_ready,
                                    step(state, variable, rngs=next(rngs)))
 
             rate = np.array(time.time() - rate)
@@ -86,7 +86,7 @@ def main(cfg: Dict[str, Any]):
             ckpt.metric.put((metric.copy(), it))
             ckpt.prediction = predictions
 
-            pbar.set_postfix(jax.tree_map(lambda x: f"{x:.2e}", metric))
+            pbar.set_postfix(jax.tree.map(lambda x: f"{x:.2e}", metric))
 
         evaluate()
 
