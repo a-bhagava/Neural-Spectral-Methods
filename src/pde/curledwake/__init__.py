@@ -57,25 +57,30 @@ class WakeInitial(Uniform):
         return result
 
     def sample(self, prng, shape=()):
-        # the base field is non-dimensionalized to a value of 1 
-        base = np.ones(shape + self.grid_shape)
-        base_field = np.broadcast_to(base, shape + (2, *self.grid_shape))
+        # base field = all ones
+        base_field = np.ones(shape + self.grid_shape)  # (…, Ny, Nz)
 
-        # add turbine wake deficit
+        # turbine wake deficit (same for all samples)
         r4 = self.rotor_diameter / 2
         wake_deficit = self.wake_deficit_ic(
             self.y_coords, self.z_coords,
             self.turbine_y, self.turbine_z,
             smooth_fact=self.smooth_fact,
             ay=r4, az=r4
-        )
+        )  # (Ny, Nz)
 
-        u4_sampled = super().sample(prng, shape)  # sample u4 from uniform distribution
+        # sample u4 values
+        u4_sampled = super().sample(prng, shape)
         delta_u = u4_sampled - self.rotor_REWS
+        delta_u = delta_u[(...,) + (None,) * len(self.grid_shape)]
 
-        wake_field = np.zeros_like(base_field)
-        wake_field = wake_deficit * delta_u
-        return base_field + wake_field
+        wake_field = delta_u * wake_deficit 
+        ic_scalar = base_field + wake_field
+
+        # expand to 2 components
+        ic = ic_scalar[..., np.newaxis, :, :]
+        ic = np.broadcast_to(ic, shape + (2, *self.grid_shape))
+        return ic
     
 
 def velocity_field(u=None,
@@ -149,9 +154,9 @@ class CurledWake(PDE):
         with jax.default_device(jax.devices("cpu")[0]):
 
             _u = np.load(f"{dir}/_u.{self.ic}.npy")
-            _u_full = np.load(f"{dir}/u.{self}.npy") # TODO: check this makes sense after data generation scripts are written
+            u_full = np.load(f"{dir}/u.{self}.npy") # TODO: check this makes sense after data generation scripts are written
             
-        return jax.vmap(self.basis)(_u), _u_full.shape[1:-1], _u_full
+        return jax.vmap(self.basis)(_u), u_full.shape[1:-1], u_full
 
     def equation(self, x: X, _u0: X, _u: X): 
         _u, _u1, _u2 = utils.fdm(_u, n=2)
