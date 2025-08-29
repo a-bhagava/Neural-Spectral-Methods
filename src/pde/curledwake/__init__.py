@@ -7,7 +7,30 @@ from .._params import *
 
 from ...basis.fourier import *
 from ...basis.chebyshev import *
-from scipy.ndimage import gaussian_filter
+import jax.numpy as jnp
+from jax.scipy.signal import fftconvolve
+
+# TODO: run hyperparameter sweep 
+
+def gaussian_kernel(size_y: int, size_z: int, sigma_y: float, sigma_z: float):
+    """Create a separable 2D Gaussian kernel (JAX)."""
+    y = jnp.arange(-size_y // 2 + 1., size_y // 2 + 1.)
+    z = jnp.arange(-size_z // 2 + 1., size_z // 2 + 1.)
+    yy, zz = jnp.meshgrid(y, z, indexing="ij")
+    kernel = jnp.exp(-(yy**2 / (2*sigma_y**2) + zz**2 / (2*sigma_z**2)))
+    return kernel / jnp.sum(kernel)
+
+
+def gaussian_blur(image, sigma_y, sigma_z, size=21):
+    # fixed kernel size (Python int, hashable)
+    y = jnp.arange(-size // 2 + 1., size // 2 + 1.)
+    z = jnp.arange(-size // 2 + 1., size // 2 + 1.)
+    yy, zz = jnp.meshgrid(y, z, indexing="ij")
+    
+    kernel = jnp.exp(-(yy**2 / (2*sigma_y**2) + zz**2 / (2*sigma_z**2)))
+    kernel = kernel / jnp.sum(kernel)
+    
+    return fftconvolve(image, kernel, mode="same")
 
 
 class WakeInitial(Uniform):
@@ -18,8 +41,8 @@ class WakeInitial(Uniform):
 
     def __init__(self, grid_shape=(128, 128),
                  turbine_y: float = 0.0, turbine_z: float = 0.0,
-                 rotor_diameter: float = 1.0, u4_min: float = 0.15, 
-                 u4_max: float = 0.95, REWS: float = 1.0, 
+                 rotor_diameter: float = 1.0, u4_min: float = 0.25, 
+                 u4_max: float = 0.75, REWS: float = 1.0, 
                  smooth_fact: float = 0.1): 
         
         super().__init__(u4_min, u4_max)       
@@ -27,38 +50,38 @@ class WakeInitial(Uniform):
         self.turbine_y = turbine_y
         self.turbine_z = turbine_z
         self.rotor_diameter = rotor_diameter
-        self.rotor_u4 = np.mean(np.array([u4_max, u4_min]))
+        self.rotor_u4 = jnp.mean(jnp.array([u4_max, u4_min]))
         self.rotor_REWS = REWS
         self.smooth_fact = smooth_fact
         
         # Create coordinate grids
-        self.y_coords = np.linspace(-2, 2, grid_shape[0])
-        self.z_coords = np.linspace(-2, 2, grid_shape[1])
+        self.y_coords = jnp.linspace(-2, 2, grid_shape[0])
+        self.z_coords = jnp.linspace(-2, 2, grid_shape[1])
 
     def wake_deficit_ic(self, y, z, yt, zt, smooth_fact, ay, az):
         """ Create turbine wake stencil represented by a gaussian smoothed indicator function """
         # define azimuthal radius if not provided
         az = ay if az is None else az
         # create meshgrid for y and z
-        yG, zG = np.meshgrid(y, z, indexing="ij")
+        yG, zG = jnp.meshgrid(y, z, indexing="ij")
         dy = y[1] - y[0]
         dz = z[1] - z[0]
 
         # calculate normalized distance from center
-        dist = np.sqrt(((yG - yt) / ay) ** 2 + ((zG - zt) / az) ** 2)
+        dist = jnp.sqrt(((yG - yt) / ay) ** 2 + ((zG - zt) / az) ** 2)
 
         # create smooth mask using tanh transition
-        mask = 0.5 * (1 - np.tanh((dist - 1) / (1e-8 + smooth_fact * 0.1)))
+        mask = 0.5 * (1 - jnp.tanh((dist - 1) / (1e-8 + smooth_fact * 0.1)))
 
         # apply Gaussian smoothing
         sigma_y = smooth_fact / dy  # grid units in y-direction
         sigma_z = smooth_fact / dz  # grid units in z-direction
-        result = gaussian_filter(mask, sigma=[sigma_y, sigma_z])
+        result = gaussian_blur(mask, sigma_y, sigma_z)
         return result
 
     def sample(self, prng, shape=()):
         # base field = all ones
-        base_field = np.ones(shape + self.grid_shape)  # (…, Ny, Nz)
+        # base_field = np.ones(shape + self.grid_shape)  # (…, Ny, Nz)
 
         # turbine wake deficit (same for all samples)
         r4 = self.rotor_diameter / 2
@@ -75,7 +98,7 @@ class WakeInitial(Uniform):
         delta_u = delta_u[(...,) + (None,) * len(self.grid_shape)]
 
         wake_field = delta_u * wake_deficit 
-        ic_scalar = base_field + wake_field
+        ic_scalar = wake_field # + base_field  
 
         # expand to 2 components
         ic = ic_scalar[..., np.newaxis, :, :]
@@ -155,8 +178,8 @@ class CurledWake(PDE):
 
         with jax.default_device(jax.devices("cpu")[0]):
 
-            _u = np.load(f"{dir}/_u_ic.{self.ic}.npy")
-            _u_full = np.load(f"{dir}/_u_full.{self}.npy")
+            _u = np.load(f"{dir}/_u_ic.npy")
+            _u_full = np.load(f"{dir}/_u_full.npy")
             
         return jax.vmap(self.basis)(_u), _u_full.shape[1:-1], _u_full
 
@@ -168,12 +191,12 @@ class CurledWake(PDE):
         _Δu = Δ(_u2[..., 0, 1:, 1:])
 
         v, w = velocity_field(u=_u.squeeze(-1))
-        _Dudx = _ux / self.X + (v * _uy + w * _uz) / (1 + _u) # TODO: check that this is right
+        _Dudx = _ux / self.X + (v * _uy + w * _uz) / (1 + _u).squeeze(-1)
 
         if self.fn is None: f = np.zeros_like(_Dudx)
         else: f = self.fn(*_u[0].squeeze(-1).shape)
 
-        return _Dudx + (self.nu * _Δu + f) / (1 + _u)
+        return _Dudx + (self.nu * _Δu + f) / (1 + _u).squeeze(-1)
 
     def boundary(self, _u: List[Tuple[X]])-> List[X]: 
         _, (_ut, _ub), (_ul, _ur) = _u
@@ -191,15 +214,15 @@ class CurledWake(PDE):
         v, w = velocity_field(u=_u.inv().squeeze(-1))
         _Dudx = self.basis.add(
             _ux.map(lambda coef: coef / self.X),
-            self.basis.transform((v * _uy.inv() + w * _uz.inv()) / (1 + _u.inv())) 
+            self.basis.transform((v * _uy.inv() + w * _uz.inv()) / (1 + _u.inv()).squeeze(-1)) 
             )
         
         # forcing term
         if self.fn is None: f = self.basis(np.zeros_like(_Dudx.coef))
         else: f = self.basis.transform(np.broadcast_to(self.fn(*_u.mode[1:]), _u.mode))
 
-        U_u = self.basis.transform(np.broadcast_to(1 / (1 + _u.inv()), _u.mode)) # TODO: change this to self.basis.mul
-        return self.basis.add(_Dudx, self.basis(self.nu * _Δu.coef * U_u.coef), f.map(np.negative))
+        U_u = self.basis.transform(np.broadcast_to(1 / (1 + _u.inv()).squeeze(-1), _u.mode))
+        return self.basis.add(_Dudx, self.basis.mul(self.basis(self.nu * _Δu.coef), U_u), f.map(np.negative))
     
 
 # ------------------------------ INITIAL CONDITION ----------------------------- #
