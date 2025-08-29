@@ -14,7 +14,7 @@ class WakeInitial(Uniform):
 
     grid = Fourier[2].grid(128, 128)
 
-    def __str__(self): return f"{self.grid_shape}x{self.rotor_u4}"
+    def __str__(self): return f"u4={round(self.rotor_u4, 3)}"
 
     def __init__(self, grid_shape=(128, 128),
                  turbine_y: float = 0.0, turbine_z: float = 0.0,
@@ -85,13 +85,18 @@ class WakeInitial(Uniform):
 
 def velocity_field(u=None,
                    D=1,
-                   N_vortex=32,
-                   sigma_vortex=0.1,
+                   N_vortex=128,
+                   sigma_vortex=0.2,
                    turbine_y=0.0, 
                    turbine_z=0.0,):
-    
-    y_coords = np.linspace(-2, 2, u.shape[1])
-    z_coords = np.linspace(-2, 2, u.shape[2])
+
+    if len(u.shape) == 2: 
+        ydim, zdim = u.shape
+    elif len(u.shape) == 3:
+        _, ydim, zdim = u.shape
+
+    y_coords = np.linspace(-2, 2, ydim)
+    z_coords = np.linspace(-2, 2, zdim)
     dz = z_coords[1] - z_coords[0]
 
     # clip edges to prevent singularities
@@ -136,9 +141,6 @@ class CurledWake(PDE):
         self.nu = nu
         self.fn = None  # no forcing term for now
 
-        self.l = (l:=ic.length)
-        self.Re = l / nu * ic.scaling
-
         self.domain = Rect(3)
         self.basis = series(Chebyshev, Fourier, Fourier)
         self.params = Interpolate(ic, self.basis)
@@ -153,10 +155,10 @@ class CurledWake(PDE):
 
         with jax.default_device(jax.devices("cpu")[0]):
 
-            _u = np.load(f"{dir}/_u.{self.ic}.npy")
-            u_full = np.load(f"{dir}/u.{self}.npy") # TODO: check this makes sense after data generation scripts are written
+            _u = np.load(f"{dir}/_u_ic.{self.ic}.npy")
+            _u_full = np.load(f"{dir}/_u_full.{self}.npy")
             
-        return jax.vmap(self.basis)(_u), u_full.shape[1:-1], u_full
+        return jax.vmap(self.basis)(_u), _u_full.shape[1:-1], _u_full
 
     def equation(self, x: X, _u0: X, _u: X): 
         _u, _u1, _u2 = utils.fdm(_u, n=2)
@@ -166,12 +168,12 @@ class CurledWake(PDE):
         _Δu = Δ(_u2[..., 0, 1:, 1:])
 
         v, w = velocity_field(u=_u.squeeze(-1))
-        _Dudx = _ux / self.X + (v * _uy + w * _uz) # self.X is the scaling factor TODO: verify with kirby, division by U
+        _Dudx = _ux / self.X + (v * _uy + w * _uz) / (1 + _u) # TODO: check that this is right
 
         if self.fn is None: f = np.zeros_like(_Dudx)
         else: f = self.fn(*_u[0].squeeze(-1).shape)
 
-        return (_Dudx + self.nu * _Δu + f) # TODO: check with kirby about the -1/U division and the addition/subtraction signs here
+        return _Dudx + (self.nu * _Δu + f) / (1 + _u)
 
     def boundary(self, _u: List[Tuple[X]])-> List[X]: 
         _, (_ut, _ub), (_ul, _ur) = _u
@@ -189,11 +191,21 @@ class CurledWake(PDE):
         v, w = velocity_field(u=_u.inv().squeeze(-1))
         _Dudx = self.basis.add(
             _ux.map(lambda coef: coef / self.X),
-            self.basis.transform(v * _uy.inv() + w * _uz.inv())
-        )
+            self.basis.transform((v * _uy.inv() + w * _uz.inv()) / (1 + _u.inv())) 
+            )
         
         # forcing term
         if self.fn is None: f = self.basis(np.zeros_like(_Dudx.coef))
         else: f = self.basis.transform(np.broadcast_to(self.fn(*_u.mode[1:]), _u.mode))
 
-        return self.basis.add(_Dudx, self.basis(self.nu * _Δu.coef), f.map(np.negative)) # TODO: check with kirby about the -1/U division and the addition/subtraction signs here
+        U_u = self.basis.transform(np.broadcast_to(1 / (1 + _u.inv()), _u.mode)) # TODO: change this to self.basis.mul
+        return self.basis.add(_Dudx, self.basis(self.nu * _Δu.coef * U_u.coef), f.map(np.negative))
+    
+
+# ------------------------------ INITIAL CONDITION ----------------------------- #
+
+ic = WakeInitial()
+
+# ------------------------------- CURLED WAKE ------------------------------ #
+
+wake_re3 = CurledWake(ic, X=10, nu=1e-3)
