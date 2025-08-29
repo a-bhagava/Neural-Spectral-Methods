@@ -1,6 +1,7 @@
 from . import *
 import mitwindfarm
 import jax
+from tqdm import tqdm
 
 from mitwindfarm.Windfield import Uniform
 from mitwindfarm.CurledWake import CurledWakeWindfield
@@ -8,10 +9,9 @@ from jax import random
 
 # things to check 
     # do the inputs u, v, w make sense -- should velocity_field be called before or after the subtraction of 1 from u0?
-    # do i need to add 1 back to the output udef to get the actual velocity field u?
-    # how to vmap the solutions across the initial condition copy -- check how the original generate function does this 
-    # does the output shape make sense? -- compare with original generate function output shape
-    # integrate this into the generate function below
+    # do i need to add 1 back to the output udef to get the actual velocity field u? -- then should i clip the baseflow at 1? 
+    # correct the self.basis.mul in the curledwake pde class
+    # correct the naming convention in the ic class / pde class so the file saving is cleaner
 
 
 def simulate_curledwake(_u0, X=10, nu=1e-3, dx=0.1,):
@@ -20,7 +20,7 @@ def simulate_curledwake(_u0, X=10, nu=1e-3, dx=0.1,):
             dx=dx,
             dy=4 / 127,
             dz=4 / 127,
-            integrator="scipy_rk23",  # see mitwindfarm.utils.integrate
+            integrator="rk4",  # see mitwindfarm.utils.integrate
             k_model="const",  # alternatives: "const", "2021"
             k_kwargs = dict(nu_T=nu),
             ybuff=2, 
@@ -51,18 +51,25 @@ def simulate_curledwake(_u0, X=10, nu=1e-3, dx=0.1,):
 
 def generate(pde: CurledWake, dx: float = 0.1, X: int = 10, Y: int = 128):
 
-    params = pde.params.sample(random.PRNGKey(0), (128, )) # 128 random samples for params, uniformly sampled u4/thrust coefficient conditions 
-    solve = F.partial(simulate_curledwake, X=pde.X, nu=pde.nu, force=pde.fn, dx=dx, nx=X)
+    params = pde.params.sample(random.PRNGKey(0), (128, )) # draw 128 random samples for params (u4/thrust coefficient conditions)
+    solve = F.partial(simulate_curledwake, X=pde.X, nu=pde.nu, dx=dx)
 
-    _u = jax.vmap(solve)(jax.vmap(lambda _u: _u.to(1, Y, Y).inv().squeeze())(params))
+    iterable_params = jax.vmap(lambda _u: _u.to(1, Y, Y).inv().squeeze())(params)
+
+    _u = []
+    for param in tqdm(iterable_params):
+        reshape_param = param[None, ...]
+        result = solve(reshape_param)
+        _u.append(result)
+
+    _u = np.stack(_u) 
     _u = np.pad(_u, [(0, 0), (0, 0), (0, 1), (0, 1)], mode="wrap")[..., np.newaxis]
 
     dir = os.path.dirname(__file__)
-
     np.save(f"{dir}/_u_ic.{pde.ic}.npy", params.coef)
     np.save(f"{dir}/_u_full.{pde}.npy", _u)
 
     return _u
 
 if __name__ == "__main__":
-    pass
+    generate(wake_re3)
