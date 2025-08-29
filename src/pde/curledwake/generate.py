@@ -7,12 +7,6 @@ from mitwindfarm.Windfield import Uniform
 from mitwindfarm.CurledWake import CurledWakeWindfield
 from jax import random
 
-# things to check 
-    # do the inputs u, v, w make sense -- should velocity_field be called before or after the subtraction of 1 from u0?
-    # do i need to add 1 back to the output udef to get the actual velocity field u? -- then should i clip the baseflow at 1? 
-    # correct the self.basis.mul in the curledwake pde class
-    # correct the naming convention in the ic class / pde class so the file saving is cleaner
-
 
 def simulate_curledwake(_u0, X=10, nu=1e-3, dx=0.1,):
 
@@ -31,22 +25,21 @@ def simulate_curledwake(_u0, X=10, nu=1e-3, dx=0.1,):
             verbose=False,
         )
 
-    _udef = _u0 - 1
-    _v0, _w0 = velocity_field(u=_udef)
+    _v0, _w0 = velocity_field(u=_u0)
 
     base_windfield = Uniform() 
     curled_wake_windfield = CurledWakeWindfield(base_windfield, **curledwake_solver_args)
     curled_wake_windfield.check_grid_init(x=0, y=0, z=0)
 
     # stamp the initial condition on the windfield
-    curled_wake_windfield.du = _udef
+    curled_wake_windfield.du = _u0
     curled_wake_windfield.dv = _v0
     curled_wake_windfield.dw = _w0
 
     # march to the desired spatial location
     curled_wake_windfield.march_to(x=X, y=0, z=0)
 
-    return curled_wake_windfield.du + 1  # add back the base windfield
+    return curled_wake_windfield.du 
 
 
 def generate(pde: CurledWake, dx: float = 0.1, X: int = 10, Y: int = 128):
@@ -66,8 +59,8 @@ def generate(pde: CurledWake, dx: float = 0.1, X: int = 10, Y: int = 128):
     _u = np.pad(_u, [(0, 0), (0, 0), (0, 1), (0, 1)], mode="wrap")[..., np.newaxis]
 
     dir = os.path.dirname(__file__)
-    np.save(f"{dir}/_u_ic.{pde.ic}.npy", params.coef)
-    np.save(f"{dir}/_u_full.{pde}.npy", _u)
+    np.save(f"{dir}/_u_ic.npy", params.coef)
+    np.save(f"{dir}/_u_full.npy", _u)
 
     return _u
 
