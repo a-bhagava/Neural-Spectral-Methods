@@ -10,7 +10,10 @@ from ...basis.chebyshev import *
 import jax.numpy as jnp
 from jax.scipy.signal import fftconvolve
 
-# TODO: run hyperparameter sweep 
+# TODO: double check PDE implementation 
+# TODO: spectral analysis of the solution -- get a sense of which fourier modes / chebyshev modes to actually try here
+# TODO: run hyperparameter sweep for preliminary experiments; get insights and finetune on these results
+# TODO: performance analysis across different thrust coefficients / u4 values
 
 def gaussian_kernel(size_y: int, size_z: int, sigma_y: float, sigma_z: float):
     """Create a separable 2D Gaussian kernel (JAX)."""
@@ -191,12 +194,18 @@ class CurledWake(PDE):
         _Δu = Δ(_u2[..., 0, 1:, 1:])
 
         v, w = velocity_field(u=_u.squeeze(-1))
-        _Dudx = _ux / self.X + (v * _uy + w * _uz) / (1 + _u).squeeze(-1)
 
-        if self.fn is None: f = np.zeros_like(_Dudx)
+        # base flow (U=1, V, W=0)
+        U = 1.0  
+
+        # advection terms
+        adv = (U + _u.squeeze(-1)) * (_ux) + (v * _uy + w * _uz)
+
+        # forcing term
+        if self.fn is None: f = np.zeros_like(adv)
         else: f = self.fn(*_u[0].squeeze(-1).shape)
 
-        return _Dudx + (self.nu * _Δu + f) / (1 + _u).squeeze(-1)
+        return adv + self.nu * _Δu + f
 
     def boundary(self, _u: List[Tuple[X]])-> List[X]: 
         _, (_ut, _ub), (_ul, _ur) = _u
@@ -212,18 +221,20 @@ class CurledWake(PDE):
         _Δu = self.basis(Δ(_u2.coef[..., 0, 1:, 1:]))
 
         v, w = velocity_field(u=_u.inv().squeeze(-1))
-        _Dudx = self.basis.add(
-            _ux.map(lambda coef: coef / self.X),
-            self.basis.transform((v * _uy.inv() + w * _uz.inv()) / (1 + _u.inv()).squeeze(-1)) 
-            )
-        
+
+        # base flow (U=1, V=W=0)
+        U = 1.0  
+
+        # advection term: (U+u) ∂u/∂x + v ∂u/∂y + w ∂u/∂z
+        scaled_udef = self.basis.mul(self.basis.transform(U + _u.inv().squeeze(-1)), _ux)
+        adv = self.basis.add(scaled_udef, self.basis.transform(v * _uy.inv() + w * _uz.inv()))
+
         # forcing term
-        if self.fn is None: f = self.basis(np.zeros_like(_Dudx.coef))
+        if self.fn is None: f = self.basis(np.zeros_like(adv.coef))
         else: f = self.basis.transform(np.broadcast_to(self.fn(*_u.mode[1:]), _u.mode))
 
-        U_u = self.basis.transform(np.broadcast_to(1 / (1 + _u.inv()).squeeze(-1), _u.mode))
-        return self.basis.add(_Dudx, self.basis.mul(self.basis(self.nu * _Δu.coef), U_u), f.map(np.negative))
-    
+        # final PDE: advection + ν Δu + f
+        return self.basis.add(adv, self.basis(self.nu * _Δu.coef), f)
 
 # ------------------------------ INITIAL CONDITION ----------------------------- #
 
