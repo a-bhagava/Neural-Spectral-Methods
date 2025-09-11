@@ -10,10 +10,6 @@ from ...basis.chebyshev import *
 import jax.numpy as jnp
 from jax.scipy.signal import fftconvolve
 
-# TODO: double check PDE implementation 
-# TODO: spectral analysis of the solution -- get a sense of which fourier modes / chebyshev modes to actually try here
-# TODO: run hyperparameter sweep for preliminary experiments; get insights and finetune on these results
-# TODO: performance analysis across different thrust coefficients / u4 values
 
 def gaussian_kernel(size_y: int, size_z: int, sigma_y: float, sigma_z: float):
     """Create a separable 2D Gaussian kernel (JAX)."""
@@ -44,9 +40,9 @@ class WakeInitial(Uniform):
 
     def __init__(self, grid_shape=(128, 128),
                  turbine_y: float = 0.0, turbine_z: float = 0.0,
-                 rotor_diameter: float = 1.0, u4_min: float = 0.25, 
+                 rotor_diameter: float = 1, u4_min: float = 0.25, 
                  u4_max: float = 0.75, REWS: float = 1.0, 
-                 smooth_fact: float = 0.1): 
+                 smooth_fact: float = 0.2):  
         
         super().__init__(u4_min, u4_max)       
         self.grid_shape = grid_shape
@@ -114,65 +110,76 @@ def velocity_field(u=None,
                    N_vortex=128,
                    sigma_vortex=0.2,
                    turbine_y=0.0, 
-                   turbine_z=0.0,):
+                   turbine_z=0.0,
+                   Ly=4.0,
+                   Lz=4.0):
 
     if len(u.shape) == 2: 
         ydim, zdim = u.shape
     elif len(u.shape) == 3:
         _, ydim, zdim = u.shape
 
-    y_coords = np.linspace(-2, 2, ydim)
-    z_coords = np.linspace(-2, 2, zdim)
+    # scale to physical domain
+    y_coords = np.linspace(-Ly/2, Ly/2, ydim)
+    z_coords = np.linspace(-Lz/2, Lz/2, zdim)
     dz = z_coords[1] - z_coords[0]
 
     # clip edges to prevent singularities
     r_i = np.linspace(-(D - dz) / 2, (D - dz) / 2, N_vortex)
 
-    # calculate total circulation from the yaw 
+    # circulation
     Gamma_0 = 0.5 * D * 1 * 2 * np.sin(30 * np.pi / 180)
-    Gamma_i = (
-            Gamma_0 * 4 * r_i / (N_vortex * D**2 * np.sqrt(1 - (2 * r_i / D) ** 2))
-        )
+    Gamma_i = Gamma_0 * 4 * r_i / (N_vortex * D**2 * np.sqrt(1 - (2 * r_i / D) ** 2))
     sigma = sigma_vortex * D
 
-    # main summation, which is 3D (y, z, i)
+    # grid
     yG, zG = np.meshgrid(y_coords, z_coords, indexing="ij")
     yG = yG[..., None]
     zG = zG[..., None]
-    rsq = (yG - turbine_y) ** 2 + (zG - turbine_z - r_i[None, None, :]) ** 2  # 3D grid variable
-    rsq = np.clip(rsq, 1e-8, None)  # avoid singularities
+    rsq = (yG - turbine_y) ** 2 + (zG - turbine_z - r_i[None, None, :]) ** 2
+    rsq = np.clip(rsq, 1e-8, None)
+
     exponent = 1 - np.exp(-rsq / sigma**2)
     summation = exponent / (2 * np.pi * rsq) * Gamma_i[None, None, :]
 
-    # sum all vortices along last dim
+    # velocity components
     v_slice = np.sum(summation * (zG - turbine_z - r_i[None, None, :]), axis=-1)
     w_slice = np.sum(summation * -(yG - turbine_y), axis=-1)
 
-    # tile along the x direction 
     v = np.broadcast_to(v_slice, (u.shape[0], *v_slice.shape))
     w = np.broadcast_to(w_slice, (u.shape[0], *w_slice.shape))    
     return v, w
 
 
+
 class CurledWake(PDE):
     def __str__(self):
         return f"CurledWake: X={self.X}, ν={self.nu}"
-    
-    def __init__(self, ic: WakeInitial, X: float, nu: float): 
 
+    def __init__(self, ic: WakeInitial, X: float, nu: float, Ly: float = 4.0, Lz: float = 4.0): 
+        """
+        X  = streamwise domain length
+        nu = viscosity
+        Ly = physical span in y (default [-2,2] → length 4)
+        Lz = physical span in z (default [-2,2] → length 4)
+        """
         self.odim = 1
         self.ic = ic
 
         self.X = X
+        self.Ly = Ly
+        self.Lz = Lz
         self.nu = nu
         self.fn = None  # no forcing term for now
 
+        # still unit box [0,1]^3
         self.domain = Rect(3)
         self.basis = series(Chebyshev, Fourier, Fourier)
         self.params = Interpolate(ic, self.basis)
 
         from ..mollifier import initial_condition
         self.mollifier = initial_condition
+
 
     @F.cached_property
     def solution(self):
@@ -188,53 +195,79 @@ class CurledWake(PDE):
 
     def equation(self, x: X, _u0: X, _u: X): 
         _u, _u1, _u2 = utils.fdm(_u, n=2)
-        _ux = _u1[..., 0, 0]
-        _uy = _u1[..., 0, 1]
-        _uz = _u1[..., 0, 2]
-        _Δu = Δ(_u2[..., 0, 1:, 1:])
 
-        v, w = velocity_field(u=_u.squeeze(-1))
+        # scale derivatives
+        _ux = (1.0 / self.X)  * _u1[..., 0, 0]
+        _uy = (1.0 / self.Ly) * _u1[..., 0, 1]
+        _uz = (1.0 / self.Lz) * _u1[..., 0, 2]
 
-        # base flow (U=1, V, W=0)
+        # Laplacian: sum of second derivatives in each direction
+        Δu = (1.0/self.X**2) * _u2[..., 0, 0, 0] \
+           + (1.0/self.Ly**2) * _u2[..., 0, 1, 1] \
+           + (1.0/self.Lz**2) * _u2[..., 0, 2, 2]
+
+        # induced cross-flow velocities
+        v, w = velocity_field(u=_u.squeeze(-1), D=1, turbine_y=0.0, turbine_z=0.0)
+
+        # base flow (U=1, V=W=0)
         U = 1.0  
 
         # advection terms
-        adv = (U + _u.squeeze(-1)) * (_ux) + (v * _uy + w * _uz)
+        adv = (U + _u.squeeze(-1)) * _ux + (v * _uy + w * _uz)
 
         # forcing term
-        if self.fn is None: f = np.zeros_like(adv)
-        else: f = self.fn(*_u[0].squeeze(-1).shape)
+        if self.fn is None:
+            f = np.zeros_like(adv)
+        else:
+            f = self.fn(*_u[0].squeeze(-1).shape)
 
-        return adv + self.nu * _Δu + f
+        return adv + self.nu * Δu + f
 
     def boundary(self, _u: List[Tuple[X]])-> List[X]: 
         _, (_ut, _ub), (_ul, _ur) = _u
         return [_ut - _ub, _ul - _ur]
 
     def spectral(self, _u0: Basis, _u: Basis) -> Basis:
-        _u1 = _u.grad()
-        _u2 = _u1.grad()
+        _u1 = _u.grad()     # first derivatives wrt unit coords
+        _u2 = _u1.grad()    # second derivatives wrt unit coords
 
-        _ux = self.basis(_u1.coef[..., 0, 0])
-        _uy = self.basis(_u1.coef[..., 0, 1])
-        _uz = self.basis(_u1.coef[..., 0, 2])
-        _Δu = self.basis(Δ(_u2.coef[..., 0, 1:, 1:]))
+        # rescale derivatives
+        _ux = self.basis((1.0 / self.X)  * _u1.coef[..., 0, 0])
+        _uy = self.basis((1.0 / self.Ly) * _u1.coef[..., 0, 1])
+        _uz = self.basis((1.0 / self.Lz) * _u1.coef[..., 0, 2])
 
-        v, w = velocity_field(u=_u.inv().squeeze(-1))
+        # Laplacian pieces
+        Δu = self.basis(
+              (1.0/self.X**2)  * _u2.coef[..., 0, 0, 0]
+            + (1.0/self.Ly**2) * _u2.coef[..., 0, 1, 1]
+            + (1.0/self.Lz**2) * _u2.coef[..., 0, 2, 2]
+        )
+
+        # induced velocities, evaluated in *physical* coordinates
+        v, w = velocity_field(
+            u=_u.inv().squeeze(-1),
+            D=1,
+            turbine_y=0.0,
+            turbine_z=0.0,
+        )
 
         # base flow (U=1, V=W=0)
         U = 1.0  
 
-        # advection term: (U+u) ∂u/∂x + v ∂u/∂y + w ∂u/∂z
-        scaled_udef = self.basis.mul(self.basis.transform(U + _u.inv().squeeze(-1)), _ux)
-        adv = self.basis.add(scaled_udef, self.basis.transform(v * _uy.inv() + w * _uz.inv()))
+        # advection term
+        adv_x = self.basis.mul(
+            self.basis.transform(U + _u.inv().squeeze(-1)), _ux
+        )
+        adv_yz = self.basis.transform(v * _uy.inv() + w * _uz.inv())
+        adv = self.basis.add(adv_x, adv_yz)
 
         # forcing term
-        if self.fn is None: f = self.basis(np.zeros_like(adv.coef))
-        else: f = self.basis.transform(np.broadcast_to(self.fn(*_u.mode[1:]), _u.mode))
+        if self.fn is None:
+            f = self.basis(np.zeros_like(adv.coef))
+        else:
+            f = self.basis.transform(np.broadcast_to(self.fn(*_u.mode[1:]), _u.mode))
 
-        # final PDE: advection + ν Δu + f
-        return self.basis.add(adv, self.basis(self.nu * _Δu.coef), f)
+        return self.basis.add(adv, self.basis(self.nu * Δu.coef), f)
 
 # ------------------------------ INITIAL CONDITION ----------------------------- #
 

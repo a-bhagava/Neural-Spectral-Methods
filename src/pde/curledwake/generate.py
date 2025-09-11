@@ -49,9 +49,9 @@ def simulate_curledwake_trajectory(_u0, X=10, dx=0.1, nX=80, nu=1e-3):
     return snapshots
 
 
-def generate(pde: CurledWake, dx: float = 0.1, X: int = 50, Y: int = 128):
+def generate(pde: CurledWake, dx: float = 0.1, X: int = 51, Y: int = 128):
 
-    params = pde.params.sample(random.PRNGKey(0), (128, )) # draw 128 random samples for params (u4/thrust coefficient conditions)
+    params = pde.params.sample(random.PRNGKey(0), (5, )) # draw 128 random samples for params (u4/thrust coefficient conditions)
     solve = F.partial(simulate_curledwake_trajectory, X=pde.X, dx=dx, nX=X, nu=pde.nu)
 
     iterable_params = jax.vmap(lambda _u: _u.to(1, Y, Y).inv().squeeze())(params)
