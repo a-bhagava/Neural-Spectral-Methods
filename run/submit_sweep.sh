@@ -2,10 +2,10 @@
 
 mkdir -p logs
 
-DEPTHS=(5 10)
-HDIMS=(16 32)
-LRS=(0.0005)
-MODES=("12 31 31" "12 41 41" "12 21 21" "18 31 31")
+DEPTHS=(5)
+HDIMS=(16)
+LRS=(0.001)
+MODES=("12 31 31")
 
 for DEPTH in "${DEPTHS[@]}"; do
 for HDIM in "${HDIMS[@]}"; do

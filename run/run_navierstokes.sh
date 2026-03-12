@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --time=18:00:00
-#SBATCH --mem=32G
 #SBATCH --partition=cpu-gpu-v100
+#SBATCH --exclude=node4
 #SBATCH --gres=gpu:1
-#SBATCH --output=slurm_log/hyperparameter/%x_%j.out
-#SBATCH --error=slurm_log/hyperparameter/%x_%j.err
+#SBATCH --output=slurm_log/multiscale/%x_%j.out
+#SBATCH --error=slurm_log/multiscale/%x_%j.err
 
 # ----------------------------
 # Arguments passed from submit script
@@ -26,7 +26,6 @@ conda activate nsm_env
 
 # --- Force consistent JAX behavior ---
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
-export XLA_PYTHON_CLIENT_MEM_FRACTION=0.95
 export TF_GPU_ALLOCATOR=cuda_malloc_async
 
 # Optional: print for sanity
@@ -39,4 +38,4 @@ nvidia-smi
 # Run experiment
 # ----------------------------
 
-note="neurips/ns.T3re4.length0.4/hyperparameter_tuning/NSM_hdim${HDIM}_depth${DEPTH}_mode${MODE_STR}_lr${LR}" iter=100000 ckpt=500  bash run/.sh --pde navierstokes.re4 --model fno --hdim ${HDIM} --depth ${DEPTH} --mode ${MODE_X} ${MODE_Y} ${MODE_T} --spectral
+note="neurips/ns.T3re4.length0.4/multiscale_testing/NSM_hdim${HDIM}_depth${DEPTH}_mode${MODE_STR}_lr${LR}" iter=100000 ckpt=500  bash run/.sh --pde navierstokes.re4 --model fno --hdim ${HDIM} --depth ${DEPTH} --mode ${MODE_X} ${MODE_Y} ${MODE_T} --multiscale

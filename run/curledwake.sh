@@ -1,0 +1,1 @@
+note=cw.X10/testnewyaw3/ iter=20000 ckpt=100        bash run/.sh --pde curledwake.wake_re3 --model fno --hdim 32 --depth 10 --mode 12 31 31 --spectral
