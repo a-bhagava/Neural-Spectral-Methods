@@ -34,7 +34,7 @@ class Initial(Gaussian):
     def __str__(self): return f"{self.length}x{self.scaling}"
 
     def __init__(self, length: float, scaling: float = 1.0):
-        super().__init__(Initial.grid, Gaussian.Per(length))
+        super().__init__(Initial.grid, Gaussian.Per(length)) # employing periodic kernel
 
         self.length = length
         self.scaling = scaling
@@ -42,7 +42,7 @@ class Initial(Gaussian):
     def sample(self, prng, shape=()) -> X:
 
         x = super().sample(prng, shape)
-        x-= np.mean(x, (-2, -1), keepdims=True)
+        x-= np.mean(x, (-2, -1), keepdims=True) # zero-mean for continuity enforcement
 
         x = self.scaling * x[..., np.newaxis, :, :]
         return np.broadcast_to(x, shape + (2, *self.dim))
@@ -99,7 +99,7 @@ class NavierStokes(PDE):
 
             w = np.load(f"{dir}/w.{self.ic}.npy")
             u = np.load(f"{dir}/u.{self}.npy")
-
+            
         return jax.vmap(self.basis)(w), u.shape[1:-1], u
 
     def equation(self, x: X, w0: X, w: X) -> X:
@@ -140,7 +140,7 @@ class NavierStokes(PDE):
 
         return self.basis.add(Dwdt, self.basis(-self.nu * Δw.coef), f.map(np.negative))
 
-ic = Initial(0.8)
+ic = Initial(0.4) # NOTE: changed this from original value of 0.8
 
 # ------------------------------- UNFORCED FLOW ------------------------------ #
 

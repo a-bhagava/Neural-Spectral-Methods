@@ -10,7 +10,6 @@ def simulate(w0: X, nu: float, f: X) -> Fx:
         u: callable what -> what' for next step
            advance vorticity in spectral domain
     """
-
     s, s = w0.shape
     kx, ky = k(s, s)
 
@@ -19,7 +18,7 @@ def simulate(w0: X, nu: float, f: X) -> Fx:
     dealias = (Δ < (2/3 * π * s) ** 2).astype(float)
     dealias = dealias.at[0, 0].set(0)   # zero-mean
 
-    def Δhat(what: X) -> X:
+    def Δhat(what: X) -> X: # defines the operator Δ in spectral domain
 
         vx, vy = velocity(what)
 
@@ -33,12 +32,12 @@ def simulate(w0: X, nu: float, f: X) -> Fx:
 
     def call(what: X, dt: float) -> X:
         
-        Δhat1 = Δhat(what)  # Heun's method
+        Δhat1 = Δhat(what)  # Heun's method -- predictor 
 
         what_tilde = what + dt * (Δhat1 - diffuse * what / 2)
         what_tilde/= 1 + dt * diffuse / 2
 
-        Δhat2 = Δhat(what_tilde)  # Cranck-Nicholson + Heun
+        Δhat2 = Δhat(what_tilde)  # Cranck-Nicholson + Heun -- corrector
 
         what = what + dt * ((Δhat1 + Δhat2) - diffuse * what) / 2
         what/= 1 + dt * diffuse / 2
@@ -70,7 +69,7 @@ def solution(w0: X, T: float, nu: float, force: Fx,
     if not force: f = np.zeros_like(w0)
     else: f = force(*w0.shape)
 
-    step = simulate(w0, nu, f)
+    step = simulate(w0, nu, f) # returns callable to advance vorticity in spectral domain
     Δt = T / (N := nt - 1)
 
     def record(what: X, _) -> Tuple[X, X]:
@@ -79,8 +78,8 @@ def solution(w0: X, T: float, nu: float, force: Fx,
         what = step(jax.lax.fori_loop(0., Δt // dt, call, what), Δt % dt)
         return what, np.fft.irfft2(what, s=w0.shape)
 
-    _, w = jax.lax.scan(record, np.fft.fft2(w0), None, N)
-    return np.concatenate([w0[np.newaxis, :], w], axis=0)
+    _, w = jax.lax.scan(record, np.fft.fft2(w0), None, N) # jax primitive for loops 
+    return np.concatenate([w0[np.newaxis, :], w], axis=0) # stack initial condition with the other solutions
 
 # ---------------------------------------------------------------------------- #
 #                                   GENERATE                                   #
@@ -88,10 +87,10 @@ def solution(w0: X, T: float, nu: float, force: Fx,
 
 def generate(pde: NavierStokes, dt: float = 1e-3, T: int = 64, X: int = 256):
 
-    params = pde.params.sample(random.PRNGKey(0), (128, ))
-    solve = F.partial(solution, T=pde.T, nu=pde.nu, force=pde.fn, dt=dt, nt=T)
+    params = pde.params.sample(random.PRNGKey(0), (128, )) # 128 random samples for params, gaussian random fields
+    solve = F.partial(solution, T=pde.T, nu=pde.nu, force=pde.fn, dt=dt, nt=T) # instantiate the solver
 
-    w = jax.vmap(solve)(jax.vmap(lambda w: w.to(1, X, X).inv().squeeze())(params))
+    w = jax.vmap(solve)(jax.vmap(lambda w: w.to(1, X, X).inv().squeeze())(params)) # solve the PDE for each initial condition 
     w = np.pad(w, [(0, 0), (0, 0), (0, 1), (0, 1)], mode="wrap")[..., np.newaxis]
 
     dir = os.path.dirname(__file__)
