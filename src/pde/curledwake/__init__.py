@@ -7,9 +7,10 @@ from .._params import *
 
 from ...basis.fourier import *
 from ...basis.chebyshev import *
+from ...basis.multiscalefourier import MSF, MSF_Mid, MSF_High
+
 import jax.numpy as jnp
 from jax.scipy.signal import fftconvolve
-
 
 def gaussian_kernel(size_y: int, size_z: int, sigma_y: float, sigma_z: float):
     """Create a separable 2D Gaussian kernel (JAX)."""
@@ -33,8 +34,7 @@ def gaussian_blur(image, sigma_y, sigma_z, size=21):
 
 
 class WakeInitial(Uniform):
-
-    grid = Fourier[2].grid(128, 128)
+    grid = Fourier[2].grid(64, 64) # check how grid size impacts the results, especially the induced velocity fields
 
     def __str__(self): return f"u4={round(self.rotor_u4, 3)}"
 
@@ -52,6 +52,7 @@ class WakeInitial(Uniform):
         self.rotor_u4 = jnp.mean(jnp.array([u4_max, u4_min]))
         self.rotor_REWS = REWS
         self.smooth_fact = smooth_fact
+        self.u4_sampled = None
         
         # Create coordinate grids
         self.y_coords = jnp.linspace(-2, 2, grid_shape[0])
@@ -91,8 +92,9 @@ class WakeInitial(Uniform):
             ay=r4, az=r4
         )  # (Ny, Nz)
 
-        # sample u4 values
+        # sample u4 value
         u4_sampled = super().sample(prng, shape)
+        self.u4_sampled = u4_sampled
         delta_u = u4_sampled - self.rotor_REWS
         delta_u = delta_u[(...,) + (None,) * len(self.grid_shape)]
 
@@ -106,13 +108,14 @@ class WakeInitial(Uniform):
     
 
 def velocity_field(u=None,
+                   yaw=0.0,
                    D=1,
                    N_vortex=128,
                    sigma_vortex=0.2,
                    turbine_y=0.0, 
                    turbine_z=0.0,
                    Ly=4.0,
-                   Lz=4.0):
+                   Lz=4.0,):
 
     if len(u.shape) == 2: 
         ydim, zdim = u.shape
@@ -128,8 +131,8 @@ def velocity_field(u=None,
     r_i = np.linspace(-(D - dz) / 2, (D - dz) / 2, N_vortex)
 
     # circulation
-    Gamma_0 = 0.5 * D * 1 * 2 * np.sin(30 * np.pi / 180)
-    Gamma_i = Gamma_0 * 4 * r_i / (N_vortex * D**2 * np.sqrt(1 - (2 * r_i / D) ** 2))
+    Gamma_0 = 0.5 * D * 1 * 2 * jnp.sin(yaw * jnp.pi / 180) # TODO: derive self.Ct from the sampled u4s?
+    Gamma_i = Gamma_0 * 4 * r_i / (N_vortex * D * jnp.sqrt(1 - (2 * r_i / D) ** 2))
     sigma = sigma_vortex * D
 
     # grid
@@ -151,12 +154,31 @@ def velocity_field(u=None,
     return v, w
 
 
+# def get_yaw_from_u0_min(u0_instance, u0_reference_mins, yaw_reference):
+#     """
+#     Map a single _u0 instance to its yaw by comparing minima.
+#     """
+#     u0_min = jnp.min(u0_instance)  # scalar per instance
+#     diffs = jnp.abs(u0_reference_mins - u0_min)  # shape [num_refs]
+#     idx = jnp.argmin(diffs)  # index of closest match
+#     #yaw_reference[idx]
+#     return  idx
+
+def get_yaw_from_u0_min(u0_instance, ref_mins):
+    u0_plane = u0_instance[0]
+    u0_min = jnp.min(u0_plane)
+    diffs = jnp.abs(ref_mins - u0_min)
+
+    return int(jnp.argmin(diffs))
+
 
 class CurledWake(PDE):
     def __str__(self):
         return f"CurledWake: X={self.X}, ν={self.nu}"
 
-    def __init__(self, ic: WakeInitial, X: float, nu: float, Ly: float = 4.0, Lz: float = 4.0): 
+    def __init__(self, ic: WakeInitial, X: float, nu: float, 
+                 Ly: float = 4.0, Lz: float = 4.0, 
+                 data_mode="easy"): 
         """
         X  = streamwise domain length
         nu = viscosity
@@ -174,8 +196,20 @@ class CurledWake(PDE):
 
         # still unit box [0,1]^3
         self.domain = Rect(3)
-        self.basis = series(Chebyshev, Fourier, Fourier)
+
+        self.basis = series(Chebyshev, 
+                            Fourier, 
+                            Fourier)
         self.params = Interpolate(ic, self.basis)
+
+        self.data_mode = data_mode
+        self.dir = os.path.dirname(__file__)
+
+        self.u0s = None
+        self.yaws = None
+        self.u4s = None
+        self.u0_ref_mins_raw = None
+        self.u0_ref_mins_spectral = None
 
         from ..mollifier import initial_condition
         self.mollifier = initial_condition
@@ -187,9 +221,22 @@ class CurledWake(PDE):
         dir = os.path.dirname(__file__)
 
         with jax.default_device(jax.devices("cpu")[0]):
+            
+            if self.data_mode in ["easy", "hard", "detail1", "coarse"]: 
+                _u = np.load(f"{dir}/_u_ic_spectral_{self.data_mode}.npy")
+                _u_full = np.load(f"{dir}/_u_full_{self.data_mode}.npy")
+                u0s_raw = jnp.load(f"{dir}/_u_ic_raw_{self.data_mode}.npy")
+                yaws = jnp.load(f"{dir}/_yaws_{self.data_mode}.npy")
+                u4s = jnp.load(f"{dir}/_u4s_{self.data_mode}.npy")
 
-            _u = np.load(f"{dir}/_u_ic.npy")
-            _u_full = np.load(f"{dir}/_u_full.npy")
+                self.u0_ref_mins_raw = jnp.array([jnp.min(u0_ref) for u0_ref in u0s_raw])
+                self.u0s_raw = jnp.load(f"{dir}/_u_ic_raw_{self.data_mode}.npy")
+                self.v_fields = jnp.load(f"{dir}/_v_fields_{self.data_mode}.npy")
+                self.w_fields = jnp.load(f"{dir}/_w_fields_{self.data_mode}.npy")
+                self.yaws = yaws
+                self.u4s = u4s
+            else:
+                raise ValueError(f"Unknown data_mode: {self.data_mode}")
             
         return jax.vmap(self.basis)(_u), _u_full.shape[1:-1], _u_full
 
@@ -206,8 +253,21 @@ class CurledWake(PDE):
            + (1.0/self.Ly**2) * _u2[..., 0, 1, 1] \
            + (1.0/self.Lz**2) * _u2[..., 0, 2, 2]
 
-        # induced cross-flow velocities
-        v, w = velocity_field(u=_u.squeeze(-1), D=1, turbine_y=0.0, turbine_z=0.0)
+        # yaw = get_yaw_from_u0_min(_u0.squeeze(-1), self.u0_ref_mins_raw)
+        # v_slice, w_slice = self.v_fields[yaw], self.w_fields[yaw]
+        # v = np.broadcast_to(v_slice, (_u.squeeze(-1).shape[0], *v_slice.shape))
+        # w = np.broadcast_to(w_slice, (_u.squeeze(-1).shape[0], *w_slice.shape)) 
+        u0_phys = _u0.inv().squeeze(-1)  # (batch, Ny, Nz)
+        v, w = jax.vmap(
+            lambda u: velocity_field(u=u, yaw=self.ic.yaw,  # yaw stored on ic
+                                    D=self.ic.rotor_diameter,
+                                    turbine_y=self.ic.turbine_y,
+                                    turbine_z=self.ic.turbine_z,
+                                    Ly=self.Ly, Lz=self.Lz)
+        )(u0_phys)
+
+        import ipdb 
+        ipdb.set_trace()
 
         # base flow (U=1, V=W=0)
         U = 1.0  
@@ -244,12 +304,10 @@ class CurledWake(PDE):
         )
 
         # induced velocities, evaluated in *physical* coordinates
-        v, w = velocity_field(
-            u=_u.inv().squeeze(-1),
-            D=1,
-            turbine_y=0.0,
-            turbine_z=0.0,
-        )
+        yaw = get_yaw_from_u0_min(_u0.inv().squeeze(-1), self.u0_ref_mins_raw, self.yaws)
+        v_slice, w_slice = self.v_fields[yaw, :128, :128], self.w_fields[yaw, :128, :128]
+        v = np.broadcast_to(v_slice, (_u.inv().squeeze(-1).shape[0], *v_slice.shape))
+        w = np.broadcast_to(w_slice, (_u.inv().squeeze(-1).shape[0], *w_slice.shape)) 
 
         # base flow (U=1, V=W=0)
         U = 1.0  
@@ -275,4 +333,4 @@ ic = WakeInitial()
 
 # ------------------------------- CURLED WAKE ------------------------------ #
 
-wake_re3 = CurledWake(ic, X=10, nu=1e-3)
+wake_re3 = CurledWake(ic, X=10, nu=1e-3, data_mode="hard")
