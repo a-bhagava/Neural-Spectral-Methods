@@ -31,12 +31,14 @@ def main(cfg: Dict[str, Any]):
             col, name = cfg["model"], cfg["model"].upper()
 
             if cfg["spectral"]: col += ".spectral"
+            elif cfg["multiscale"]: col += ".multiscale"
             mod = import_module(f"src.model.{col}")
 
             Model: Solver = getattr(mod, name)
             model = Model(pde, cfg)
+        
 
-# ---------------------------------------------------------------------------- #
+# ----------------------    ------------------------------------------------------ #
 #                                     TRAIN                                    #
 # ---------------------------------------------------------------------------- #
 
@@ -127,6 +129,8 @@ if __name__ == "__main__":
     args.add_argument("--pde", type=str, help="PDE name")
     args.add_argument("--model", type=str, help="model name", choices=["fno", "sno"]) # --cheb=cno
     args.add_argument("--spectral", dest="spectral", action="store_true", help="spectral training")
+    args.add_argument("--multiscale", dest="multiscale", action="store_true", help="multiscale training")
+
 
 # ----------------------------------- MODEL ---------------------------------- #
 
