@@ -131,7 +131,6 @@ if __name__ == "__main__":
     args.add_argument("--spectral", dest="spectral", action="store_true", help="spectral training")
     args.add_argument("--multiscale", dest="multiscale", action="store_true", help="multiscale training")
 
-
 # ----------------------------------- MODEL ---------------------------------- #
 
     args.add_argument("--hdim", type=int, help="hidden dimension")
@@ -140,9 +139,11 @@ if __name__ == "__main__":
 
     args.add_argument("--mode", type=int, nargs="+", help="number of modes per dim")
     args.add_argument("--grid", type=int, default=256, help="training grid size")
+    args.add_argument("--wavelet_levels", type=int, help="number of wavelet levels")
+    args.add_argument("--wavelet", type=str, help="type of wavelet to use")
+    args.add_argument("--msf_offsets", type=int, nargs="+", help="offsets for multiscale fourier bases")
 
     ## ablation study
-
     args.add_argument("--fourier", dest="fourier", action="store_true", help="fourier basis only")
     args.add_argument("--cheb", dest="cheb", action="store_true", help="using chebyshev")
 

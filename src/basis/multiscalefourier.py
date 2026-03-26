@@ -19,6 +19,12 @@ class MultiScaleFourier(Fourier):
     @staticmethod
     def repr() -> str:
         return "M"
+    
+    @classmethod
+    def fn(cls, n: int, x: X) -> X:
+        offset = cls.get_offset()
+        shifted_freqs = np.arange(n//2+1) + offset  # [offset, ..., offset+n//2]
+        return np.moveaxis(real(np.moveaxis(np.exp(x * shifted_freqs * 2j * π), -1, 0), n), 0, -1)
 
     @classmethod
     def get_offset(cls) -> int:
@@ -133,9 +139,6 @@ def MSF(mode_offset: int = 0):
 
     return _MultiScaleFourier
 
-
-MSF_Mid = MSF(5)
-MSF_High = MSF(30)
 
 # ---------------------------------------------------------------------------- #
 #                                    HELPER                                    #

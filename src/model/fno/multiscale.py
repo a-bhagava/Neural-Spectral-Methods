@@ -3,8 +3,12 @@ from .._base import *
 from ...basis import *
 from ...basis.fourier import *
 from ...basis.chebyshev import *
-from ...basis.multiscalefourier import MSF, MSF_Mid, MSF_High
+from ...basis.multiscalefourier import MSF
 import jaxwt as jwt
+
+# TODO: 
+# double check the math on the MSF offset class vs the fourier class (e.g. make sure the frequencies are aligned correctly and that the basis functions are orthogonal)
+# write an algorithm to identify the correct fourier bases to use for each wavelet scale (e.g. by looking at the frequency spectrum of the wavelet coefficients and choosing the fourier bases that correspond to those frequencies)
 
 def zero_triplet(triplet):
     cH, cV, cD = triplet
@@ -23,102 +27,69 @@ def reconstruct_coeffs(coeffs, level, component, wav):
                 new_coeffs.append(zero_triplet(coeffs[i]))
     return new_coeffs
 
+
 class FNO(Spectral):
 
     def __repr__(self): return "NSM"
 
     @nn.compact
     def forward(self, ϕ: Basis) -> Basis:
-        T_approx = self.pde.basis
-        T_detail1 = series(Chebyshev, MSF_Mid, MSF_Mid)
-        T_detail2 = series(Chebyshev, MSF_High, MSF_High)
-        
-        coeffs = jwt.wavedec2(ϕ.inv()[0, :, :, 0], "haar", level=2)
-        approx_coeffs = reconstruct_coeffs(coeffs, 2, "approx", "haar")
-        detail1_coeffs = reconstruct_coeffs(coeffs, 2, 1, "haar")
-        detail2_coeffs = reconstruct_coeffs(coeffs, 2, 2, "haar")
+        wavelet = self.cfg.get("wavelet", "haar")
+        levels  = self.cfg.get("wavelet_levels", 2)
 
-        approx = jwt.waverec2(approx_coeffs, "haar")[:, :, :, np.newaxis]
-        detail1 = jwt.waverec2(detail1_coeffs, "haar")[:, :, :, np.newaxis]
-        detail2 = jwt.waverec2(detail2_coeffs, "haar")[:, :, :, np.newaxis]
+        # build one basis per level + one for approx
+        # e.g. levels=2 → [T_approx, T_detail1, T_detail2]
+        bases = [self.pde.basis] + [
+                series(Chebyshev, MSF(offset), MSF(offset))
+                for offset in self.cfg["msf_offsets"]
+            ]
 
-        approx_final = np.broadcast_to(approx, ϕ.coef.shape)
-        detail1_final = np.broadcast_to(detail1, ϕ.coef.shape)
-        detail2_final = np.broadcast_to(detail2, ϕ.coef.shape)
+        # decompose input
+        coeffs = jwt.wavedec2(ϕ.inv()[0, :, :, 0], wavelet, level=levels)
 
-        approx_basis = T_approx.transform(approx_final)
-        detail1_basis = T_detail1.transform(detail1_final)
-        detail2_basis = T_detail2.transform(detail2_final)
+        # reconstruct each subband in physical space
+        subbands = []
+        approx_coeffs = reconstruct_coeffs(coeffs, levels, "approx", wavelet)
+        subbands.append(jwt.waverec2(approx_coeffs, wavelet)[:, :, :, np.newaxis])
+        for i in range(1, levels + 1):
+            detail_coeffs = reconstruct_coeffs(coeffs, levels, i, wavelet)
+            subbands.append(jwt.waverec2(detail_coeffs, wavelet)[:, :, :, np.newaxis])
 
-        u_approx = approx_basis.to(*self.cfg["mode"])
-        u_detail1 = detail1_basis.to(*self.cfg["mode"])
-        u_detail2 = detail2_basis.to(*self.cfg["mode"])
+        # project each subband onto its matched basis
+        us = []
+        for i, (subband, T) in enumerate(zip(subbands, bases)):
+            x = np.broadcast_to(subband, ϕ.coef.shape)
+            u = T.transform(x).to(*self.cfg["mode"])
 
-        bias_approx = T_approx.transform(u_approx.grid(*u_approx.mode)).coef
-        u_approx = u_approx.map(lambda coef: np.concatenate([coef, bias_approx], axis=-1))
-        bias_detail1 = T_detail1.transform(u_detail1.grid(*u_detail1.mode)).coef
-        u_detail1 = u_detail1.map(lambda coef: np.concatenate([coef, bias_detail1], axis=-1))
-        bias_detail2 = T_detail2.transform(u_detail2.grid(*u_detail2.mode)).coef
-        u_detail2 = u_detail2.map(lambda coef: np.concatenate([coef, bias_detail2], axis=-1))
+            bias = T.transform(u.grid(*u.mode)).coef
+            u = u.map(lambda coef: np.concatenate([coef, bias], axis=-1))
 
-        u_approx = u_approx.map(nn.Dense(self.cfg["hdim"] * 4))
-        u_approx = T_approx.transform(self.activate(u_approx.inv()))
-        u_detail1 = u_detail1.map(nn.Dense(self.cfg["hdim"] * 4))
-        u_detail1 = T_detail1.transform(self.activate(u_detail1.inv()))
-        u_detail2 = u_detail2.map(nn.Dense(self.cfg["hdim"] * 4))
-        u_detail2 = T_detail2.transform(self.activate(u_detail2.inv()))
+            u = u.map(nn.Dense(self.cfg["hdim"] * 4))
+            u = T.transform(self.activate(u.inv()))
+            u = u.map(nn.Dense(self.cfg["hdim"]))
+            u = T.transform(self.activate(u.inv()))
+            us.append((u, T))
 
-        u_approx = u_approx.map(nn.Dense(self.cfg["hdim"]))
-        u_approx = T_approx.transform(self.activate(u_approx.inv()))
-        u_detail1 = u_detail1.map(nn.Dense(self.cfg["hdim"]))
-        u_detail1 = T_detail1.transform(self.activate(u_detail1.inv()))
-        u_detail2 = u_detail2.map(nn.Dense(self.cfg["hdim"]))
-        u_detail2 = T_detail2.transform(self.activate(u_detail2.inv()))
-
+        # parallel FNO layers
         for _ in range(self.cfg["depth"]):
+            new_us = []
+            for u, T in us:
+                conv = SpectralConv(self.cfg["hdim"])(u)
+                fc   = u.map(nn.Dense(self.cfg["hdim"]))
+                u    = T.add(conv, fc)
+                u    = T.transform(self.activate(u.inv()))
+                new_us.append((u, T))
+            us = new_us
 
-            # process approx scale
-            conv_approx = SpectralConv(self.cfg["hdim"])(u_approx)
-            fc_approx = u_approx.map(nn.Dense(self.cfg["hdim"]))
-            u_approx = T_approx.add(conv_approx, fc_approx)
-            u_approx = T_approx.transform(self.activate(u_approx.inv()))
-            
-            # process detail1 scale
-            conv_detail1 = SpectralConv(self.cfg["hdim"])(u_detail1)
-            fc_detail1 = u_detail1.map(nn.Dense(self.cfg["hdim"]))
-            u_detail1 = T_detail1.add(conv_detail1, fc_detail1)
-            u_detail1 = T_detail1.transform(self.activate(u_detail1.inv()))
-            
-            # process detail2 scale
-            conv_detail2 = SpectralConv(self.cfg["hdim"])(u_detail2)
-            fc_detail2 = u_detail2.map(nn.Dense(self.cfg["hdim"]))
-            u_detail2 = T_detail2.add(conv_detail2, fc_detail2)
-            u_detail2 = T_detail2.transform(self.activate(u_detail2.inv()))
+        # fusion
+        outs = [u.inv() for u, _ in us]
+        u_cat = np.concatenate(outs, axis=-1)
+        u = bases[0].transform(u_cat)
 
-        u_approx = u_approx.map(nn.Dense(self.cfg["hdim"]))
-        u_approx = T_approx.transform(self.activate(u_approx.inv()))
-        u_detail1 = u_detail1.map(nn.Dense(self.cfg["hdim"]))
-        u_detail1 = T_detail1.transform(self.activate(u_detail1.inv()))
-        u_detail2 = u_detail2.map(nn.Dense(self.cfg["hdim"]))
-        u_detail2 = T_detail2.transform(self.activate(u_detail2.inv()))
-
-        u_approx = u_approx.map(nn.Dense(self.cfg["hdim"] * 4))
-        u_approx = T_approx.transform(self.activate(u_approx.inv()))
-        u_detail1 = u_detail1.map(nn.Dense(self.cfg["hdim"] * 4))
-        u_detail1 = T_detail1.transform(self.activate(u_detail1.inv()))
-        u_detail2 = u_detail2.map(nn.Dense(self.cfg["hdim"] * 4))
-        u_detail2 = T_detail2.transform(self.activate(u_detail2.inv()))
-
-        u_approx = u_approx.map(nn.Dense(self.pde.odim))
-        u_detail1 = u_detail1.map(nn.Dense(self.pde.odim))
-        u_detail2 = u_detail2.map(nn.Dense(self.pde.odim))  
-
-        # recombine the different scales using wavelet reconstruction
-        out_approx  = u_approx.inv()
-        out_detail1 = u_detail1.inv()
-        out_detail2 = u_detail2.inv()
-
-        # reconstruct each batch item and output channel
-        u_phys = out_approx + out_detail1 + out_detail2
-        u = T_approx.transform(u_phys)
+        # decoder
+        u = u.map(nn.Dense(self.cfg["hdim"]))
+        u = bases[0].transform(self.activate(u.inv()))
+        u = u.map(nn.Dense(self.cfg["hdim"] * 4))
+        u = bases[0].transform(self.activate(u.inv()))
+        u = u.map(nn.Dense(self.pde.odim))
         return self.pde.mollifier(ϕ, u)
