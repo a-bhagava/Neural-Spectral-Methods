@@ -21,7 +21,7 @@ class Checkpoint(Thread):
         self.title = kwargs["pde"] + ":" + kwargs["model"]
         if kwargs["spectral"]: self.title += "+spectral"
 
-        os.makedirs(self.path, exist_ok=False)
+        os.makedirs(self.path, exist_ok=True) # NOTE: changed to true
         print(kwargs, file=open(f"{self.path}/cfg", "w"))
 
     @property
@@ -39,7 +39,16 @@ class Checkpoint(Thread):
     def run(self):
 
         from collections import defaultdict
+        import os, re
         log = defaultdict(lambda: list())
+
+        # restore existing metric history from saved .npy files
+        for fname in os.listdir(self.path):
+            m = re.match(r"metric\.(.+)\.npy", fname)
+            if m:
+                key = m.group(1)
+                arr = np.load(f"{self.path}/{fname}")
+                log[key] = list(arr)
 
         while True:
 
