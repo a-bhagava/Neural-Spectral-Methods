@@ -64,7 +64,7 @@ def main(cfg: Dict[str, Any]):
         step = utils.jit(F.partial(train.apply, method=step, mutable=True))
         step(state, variable, rngs=next(rngs))
 
-        def evaluate():
+        def evaluate(it=None):
             global metric, predictions
             metric, predictions = train.apply(state, variable,
                                   method=eval, rngs=next(rngs))
@@ -89,16 +89,23 @@ def main(cfg: Dict[str, Any]):
                 "state":     ref["state"],
             })
             open(resume_flag, "w").close()
-            submit_script = os.environ.get("SUBMIT_SCRIPT", "")
-            if submit_script:
-                os.system(f"sbatch {submit_script}")
+            # submit_script = os.environ.get("SUBMIT_SCRIPT", "")
+            # if submit_script:
+            #     os.system(f"sbatch {submit_script}")
+            job_id = os.environ.get("SLURM_JOB_ID")
+            if job_id:
+                print(f"Requeuing job {job_id}...")
+                sys.stdout.flush()
+                os.system(f"scontrol requeue {job_id}")
             sys.exit(0)
 
         signal.signal(signal.SIGTERM, handle_signal)         # preemption; mit preemptable, when you get kicked off preemptable
         signal.signal(signal.SIGUSR1, handle_signal)         # termination bc of walltime 
 
         ckpt.start()
-
+        
+        # initialize metric and predictions before the loop
+        evaluate()
         from tqdm import trange
         for it in (pbar:=trange(start_it, cfg["iter"])):    # + start_it instead of 0
 
@@ -121,7 +128,7 @@ def main(cfg: Dict[str, Any]):
             ckpt.prediction = predictions
             pbar.set_postfix(jax.tree.map(lambda x: f"{x:.2e}", metric))
 
-        evaluate()
+        evaluate(it)
         ckpt.metric.put((metric, None))
         ckpt.prediction = predictions
         ckpt.join()
