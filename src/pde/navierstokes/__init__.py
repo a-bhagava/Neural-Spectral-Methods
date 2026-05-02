@@ -140,13 +140,17 @@ class NavierStokes(PDE):
 
         return self.basis.add(Dwdt, self.basis(-self.nu * Δw.coef), f.map(np.negative))
 
-ic = Initial(0.4) # NOTE: changed this from original value of 0.8
+ic_8 = Initial(0.8)
+ic_4 = Initial(0.4)
+ic_2 = Initial(0.2)
 
 # ------------------------------- UNFORCED FLOW ------------------------------ #
 
-re2 = NavierStokes(ic, T=3, nu=1e-2)
-re3 = NavierStokes(ic, T=3, nu=1e-3)
-re4 = NavierStokes(ic, T=3, nu=1e-4)
+# re2 = NavierStokes(ic, T=3, nu=1e-2)
+# re3 = NavierStokes(ic, T=3, nu=1e-3)
+re4_8 = NavierStokes(ic_8, T=3, nu=1e-4)
+re4_4 = NavierStokes(ic_4, T=3, nu=1e-4)
+re4_2 = NavierStokes(ic_2, T=3, nu=1e-4)
 
 # ------------------------------ TRANSIENT FLOW ------------------------------ #
 
@@ -155,4 +159,4 @@ def transient(nx: int, ny: int) -> X:
     xy = utils.grid(nx, ny, mode="left").sum(-1)
     return 0.1*(np.sin(2*π*xy) + np.cos(2*π*xy))
 
-tf = NavierStokes(ic, T=50, nu=2e-3, fn=transient)
+# tf = NavierStokes(ic, T=50, nu=2e-3, fn=transient)

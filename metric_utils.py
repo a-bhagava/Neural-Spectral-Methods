@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import numpy as np
+import matplotlib.pyplot as plt
 
 def hyperparameter_results(root_dir, log_scale=True, plotting=True):
     residual_errors = {}

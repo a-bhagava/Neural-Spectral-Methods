@@ -1,9 +1,9 @@
 #!/bin/bash
 
-DEPTHS=(10)
-HDIMS=(16)
-LRS=(0.001)
-MODES=("12 31 31")
+DEPTHS=(10 15)
+HDIMS=(16 32)
+LRS=(0.001 0.0005)
+MODES=("12 31 31" "12 41 41" "18 31 31")
 
 for DEPTH in "${DEPTHS[@]}"; do
 for HDIM in "${HDIMS[@]}"; do
@@ -15,16 +15,20 @@ for MODE in "${MODES[@]}"; do
 
     sbatch <<EOF
 #!/bin/bash
-#SBATCH --job-name=${JOB_NAME}
-#SBATCH --time=18:00:00
-#SBATCH --mem=32G
-#SBATCH --partition=cpu-gpu-v100
-#SBATCH --gres=gpu:1
+#SBATCH -p mit_normal_gpu,mit_preemptable
+#SBATCH --exclude node1928,node4007
+#SBATCH --requeue
+#SBATCH --mem=256G
+#SBATCH -G 1
+#SBATCH --output=navierstokes_%j.out
+#SBATCH --signal=USR1@90
+#SBATCH --time=05:59:00
 
 source ~/.bashrc
 conda activate nsm_env
 
-note="neurips/ns.T3re4.length0.4/wavelet_testing/wav1_hdim${HDIM}_depth${DEPTH}_mode${MODE_STR}_lr${LR}" iter=50000 ckpt=500       bash run/.sh --pde navierstokes.re4 --model fno --hdim ${HDIM} --depth ${DEPTH} --mode ${MODE} --spectral
+XLA_PYTHON_CLIENT_PREALLOCATE=false exec python main.py --seed 42 --hdim ${HDIM} --depth ${DEPTH} --activate relu --pde navierstokes.re4_8 --model fno --mode ${MODE} --spectral train --bs 16 --lr ${LR} --schd exp --iter 200000 --vmap "" --ckpt 1000 --note "multiscale/wav_hyperparam/nsT3re4.length0.8/nsm_hdim${HDIM}_depth${DEPTH}_mode${MODE_STR}_lr${LR}" --save
+
 EOF
 
     sleep 0.5

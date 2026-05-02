@@ -64,12 +64,12 @@ def main(cfg: Dict[str, Any]):
         step = utils.jit(F.partial(train.apply, method=step, mutable=True))
         step(state, variable, rngs=next(rngs))
 
-        def evaluate(it=None):
+        def evaluate():
             global metric, predictions
             metric, predictions = train.apply(state, variable,
                                   method=eval, rngs=next(rngs))
             if cfg["save"]:
-                np.save(f"{ckpt.path}/variable_{it}.npy",      
+                np.save(f"{ckpt.path}/variable_ckpt.npy",      
                         variable, allow_pickle=True)    
 
         # + ref dict so signal handler can access loop-local variables
@@ -128,7 +128,7 @@ def main(cfg: Dict[str, Any]):
             ckpt.prediction = predictions
             pbar.set_postfix(jax.tree.map(lambda x: f"{x:.2e}", metric))
 
-        evaluate(it)
+        evaluate()
         ckpt.metric.put((metric, None))
         ckpt.prediction = predictions
         ckpt.join()
@@ -157,6 +157,7 @@ if __name__ == "__main__":
     args.add_argument("--model", type=str, help="model name", choices=["fno", "sno"])
     args.add_argument("--spectral", dest="spectral", action="store_true", help="spectral training")
     args.add_argument("--multiscale", dest="multiscale", action="store_true", help="multiscale training")
+    args.add_argument("--hierarchical", dest="hierarchical", action="store_true", help="hierarchical training")
 
     args.add_argument("--hdim", type=int, help="hidden dimension")
     args.add_argument("--depth", type=int, help="number of layers")
@@ -166,7 +167,8 @@ if __name__ == "__main__":
     args.add_argument("--grid", type=int, default=256, help="training grid size")
     args.add_argument("--wavelet_levels", type=int, help="number of wavelet levels")
     args.add_argument("--wavelet", type=str, help="type of wavelet to use")
-    args.add_argument("--msf_offsets", type=int, nargs="+", help="multiscale fourier offsets")
+    args.add_argument("--msf_offsets", type=int, nargs="+", help="multiscale fourier offsets (legacy)")
+    args.add_argument("--msf_config", type=str, help="MSF configuration: 'offsets|modes' (e.g., '0 0 21 21 43 43|21 21 22 22 21 21')")
 
     args.add_argument("--fourier", dest="fourier", action="store_true", help="fourier basis only")
     args.add_argument("--cheb", dest="cheb", action="store_true", help="using chebyshev")
