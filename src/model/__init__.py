@@ -51,21 +51,35 @@ class PINN(Solver, ABC):
 
 # --------------------------------- SPECTRAL --------------------------------- #
 
+# class Spectral(Solver, ABC):
+
+#     @abstractmethod
+#     def forward(self, ϕ: Basis) -> Basis: pass
+
+#     def u(self, ϕ: Basis, x: X) -> X:
+
+#         u = self.forward(ϕ)
+
+#         if isinstance(x, Tuple): return u[x]
+#         if isinstance(x, Array): return u(x)
+
+#     def loss(self, ϕ: Basis) -> Dict[str, X]:
+
+#         R = self.pde.spectral(ϕ, self.forward(ϕ))
+#         return dict(residual=np.sum(np.square(R.coef)))
+
 class Spectral(Solver, ABC):
 
     @abstractmethod
-    def forward(self, ϕ: Basis) -> Basis: pass
+    def forward(self, ϕ: Basis, apply_noise: bool = False) -> Basis: pass
 
     def u(self, ϕ: Basis, x: X) -> X:
-
-        u = self.forward(ϕ)
-
+        u = self.forward(ϕ, apply_noise=False)  # clean — eval
         if isinstance(x, Tuple): return u[x]
         if isinstance(x, Array): return u(x)
 
     def loss(self, ϕ: Basis) -> Dict[str, X]:
-
-        R = self.pde.spectral(ϕ, self.forward(ϕ))
+        R = self.pde.spectral(ϕ, self.forward(ϕ, apply_noise=True))  # noised — training
         return dict(residual=np.sum(np.square(R.coef)))
 
 # ---------------------------------------------------------------------------- #

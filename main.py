@@ -11,8 +11,8 @@ def main(cfg: Dict[str, Any]):
         import jax_smi as smi
         smi.initialise_tracking()
 
-    prng = random.PRNGKey(cfg["seed"])
-    rngs = RNGS(prng, ["params", "sample"])
+    prng = random.PRNGKey(cfg["seed"])  
+    rngs = RNGS(prng, ["params", "sample", "noise"])
 
     from importlib import import_module
 
@@ -30,6 +30,7 @@ def main(cfg: Dict[str, Any]):
 
             if cfg["spectral"]: col += ".spectral"
             elif cfg["multiscale"]: col += ".multiscale"
+            elif cfg["hierarchical"]: col += ".hierarchical"
             mod = import_module(f"src.model.{col}")
 
             Model: Solver = getattr(mod, name)
@@ -89,7 +90,7 @@ def main(cfg: Dict[str, Any]):
                 "state":     ref["state"],
             })
             open(resume_flag, "w").close()
-            # submit_script = os.environ.get("SUBMIT_SCRIPT", "")
+            submit_script = os.environ.get("SUBMIT_SCRIPT", "")
             # if submit_script:
             #     os.system(f"sbatch {submit_script}")
             job_id = os.environ.get("SLURM_JOB_ID")
@@ -133,6 +134,12 @@ def main(cfg: Dict[str, Any]):
         ckpt.prediction = predictions
         ckpt.join()
 
+        # sanity check
+        leaves = jax.tree_util.tree_leaves(variable)
+        checksum = sum(float(np.sum(x)) for x in leaves)
+        print(f"Final checkpoint checksum: {checksum:.6f}")
+        np.save(f"{ckpt.path}/variable_ckpt.npy", variable, allow_pickle=True)  # explicit final save
+
         return pde, model.bind(variable, rngs=next(rngs))
 
     else:
@@ -169,6 +176,15 @@ if __name__ == "__main__":
     args.add_argument("--wavelet", type=str, help="type of wavelet to use")
     args.add_argument("--msf_offsets", type=int, nargs="+", help="multiscale fourier offsets (legacy)")
     args.add_argument("--msf_config", type=str, help="MSF configuration: 'offsets|modes' (e.g., '0 0 21 21 43 43|21 21 22 22 21 21')")
+    args.add_argument("--num_levels", type=int, help="number of levels for hierarchical SNO/FNO")
+    args.add_argument("--bottleneck_depth", type=int, help="number of layers in the bottleneck for hierarchical SNO/FNO")
+
+    # data augmentation
+    args.add_argument("--uniform_gaussian_noise", type=bool, default=False, help="add uniform gaussian noise to the input coefs")
+    args.add_argument("--energy_scaled_gaussian_noise", type=bool, default=False, help="add energy scaled gaussian noise to the input coefs")
+    args.add_argument("--spectral_dropout", type=bool, default=False, help="apply complementary spectral dropout to the input coefs")
+    args.add_argument("--spectral_noise_std", type=float, default=0.01, help="standard deviation for spectral noise")
+    args.add_argument("--spectral_dropout_rate", type=float, default=0.1, help="dropout rate for spectral dropout")
 
     args.add_argument("--fourier", dest="fourier", action="store_true", help="fourier basis only")
     args.add_argument("--cheb", dest="cheb", action="store_true", help="using chebyshev")

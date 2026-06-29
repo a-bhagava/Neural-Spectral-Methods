@@ -17,7 +17,8 @@ def step(self: Trainer, variable: ϴ) -> Tuple[ϴ, Dict[str, X]]:
 
         temp_var = variable.copy()
         temp_var.update(dict(params=params))
-        loss = self.mod.apply(temp_var, ϕ, method="loss")
+        # loss = self.mod.apply(temp_var, ϕ, method="loss")
+        loss = self.mod.apply(temp_var, ϕ, method="loss", rngs={"noise": self.make_rng("noise")})
         # loss = self.mod.apply(variable.copy(dict(params=params)), ϕ, method="loss")
         return jax.tree_util.tree_reduce(O.add, loss), loss
 
