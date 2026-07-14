@@ -1,0 +1,323 @@
+{
+  "L=0.2": {
+    "L=0.1": {
+      "divergence": {
+        "lifting_layer": 0.5759378671646118,
+        "encoder_level_0": 0.9484094381332397,
+        "encoder_level_1": 0.5859832763671875,
+        "encoder_level_2": 0.5520015358924866,
+        "bottleneck_0": 0.7074817419052124,
+        "bottleneck_1": 1.0220521688461304,
+        "bottleneck_2": 1.179904818534851,
+        "decoder_level_0": 0.14079393446445465,
+        "decoder_level_1": 0.24134023487567902,
+        "decoder_level_2": 0.5843971371650696,
+        "final_projection_layer": 0.29140645265579224
+      }
+    },
+    "L=0.2": {
+      "divergence": {
+        "lifting_layer": 0.0,
+        "encoder_level_0": 0.0,
+        "encoder_level_1": 0.0,
+        "encoder_level_2": 0.0,
+        "bottleneck_0": 0.0,
+        "bottleneck_1": 0.0,
+        "bottleneck_2": 0.0,
+        "decoder_level_0": 0.0,
+        "decoder_level_1": 0.0,
+        "decoder_level_2": 0.0,
+        "final_projection_layer": 0.0
+      }
+    },
+    "L=0.3": {
+      "divergence": {
+        "lifting_layer": 0.5151346325874329,
+        "encoder_level_0": 1.0554224252700806,
+        "encoder_level_1": 0.6640796065330505,
+        "encoder_level_2": 0.6931441426277161,
+        "bottleneck_0": 0.7245144248008728,
+        "bottleneck_1": 0.8696389198303223,
+        "bottleneck_2": 0.8808121085166931,
+        "decoder_level_0": 0.1597520112991333,
+        "decoder_level_1": 0.28043830394744873,
+        "decoder_level_2": 0.541857898235321,
+        "final_projection_layer": 0.24681448936462402
+      }
+    },
+    "L=0.4": {
+      "divergence": {
+        "lifting_layer": 0.5528661012649536,
+        "encoder_level_0": 0.788468062877655,
+        "encoder_level_1": 0.6957135796546936,
+        "encoder_level_2": 0.8757343292236328,
+        "bottleneck_0": 0.8819767832756042,
+        "bottleneck_1": 1.0483812093734741,
+        "bottleneck_2": 1.0516074895858765,
+        "decoder_level_0": 0.1561136096715927,
+        "decoder_level_1": 0.2975042462348938,
+        "decoder_level_2": 0.6230162978172302,
+        "final_projection_layer": 0.2420157641172409
+      }
+    },
+    "L=0.6": {
+      "divergence": {
+        "lifting_layer": 0.4778434634208679,
+        "encoder_level_0": 0.9940689206123352,
+        "encoder_level_1": 0.6269578337669373,
+        "encoder_level_2": 0.6653240919113159,
+        "bottleneck_0": 0.7073538899421692,
+        "bottleneck_1": 0.8774805068969727,
+        "bottleneck_2": 0.9144964218139648,
+        "decoder_level_0": 0.113276407122612,
+        "decoder_level_1": 0.23890794813632965,
+        "decoder_level_2": 0.51628178358078,
+        "final_projection_layer": 0.1960773766040802
+      }
+    },
+    "L=0.8": {
+      "divergence": {
+        "lifting_layer": 0.46472862362861633,
+        "encoder_level_0": 0.7080952525138855,
+        "encoder_level_1": 0.6091497540473938,
+        "encoder_level_2": 0.7638415098190308,
+        "bottleneck_0": 0.8432455062866211,
+        "bottleneck_1": 1.0429489612579346,
+        "bottleneck_2": 1.102715253829956,
+        "decoder_level_0": 0.10766875743865967,
+        "decoder_level_1": 0.22841115295886993,
+        "decoder_level_2": 0.5689783692359924,
+        "final_projection_layer": 0.1859275847673416
+      }
+    },
+    "L=1.0": {
+      "divergence": {
+        "lifting_layer": 0.3953510820865631,
+        "encoder_level_0": 0.5483664274215698,
+        "encoder_level_1": 0.4566915035247803,
+        "encoder_level_2": 0.49851903319358826,
+        "bottleneck_0": 0.5273342728614807,
+        "bottleneck_1": 0.6159220933914185,
+        "bottleneck_2": 0.6166999340057373,
+        "decoder_level_0": 0.10674484074115753,
+        "decoder_level_1": 0.19895358383655548,
+        "decoder_level_2": 0.39059966802597046,
+        "final_projection_layer": 0.18147160112857819
+      }
+    }
+  },
+  "L=0.4": {
+    "L=0.1": {
+      "divergence": {
+        "lifting_layer": 0.4226933717727661,
+        "encoder_level_0": 1.1673310995101929,
+        "encoder_level_1": 0.978173553943634,
+        "encoder_level_2": 0.3962061107158661,
+        "bottleneck_0": 0.382724791765213,
+        "bottleneck_1": 0.3807107210159302,
+        "bottleneck_2": 0.3497978746891022,
+        "decoder_level_0": 0.28048965334892273,
+        "decoder_level_1": 0.24214330315589905,
+        "decoder_level_2": 0.3466164469718933,
+        "final_projection_layer": 0.4222079813480377
+      }
+    },
+    "L=0.2": {
+      "divergence": {
+        "lifting_layer": 0.3942410945892334,
+        "encoder_level_0": 0.8827030658721924,
+        "encoder_level_1": 0.7287933230400085,
+        "encoder_level_2": 0.37383371591567993,
+        "bottleneck_0": 0.37498053908348083,
+        "bottleneck_1": 0.38412904739379883,
+        "bottleneck_2": 0.3617008328437805,
+        "decoder_level_0": 0.24490514397621155,
+        "decoder_level_1": 0.23016241192817688,
+        "decoder_level_2": 0.3461986780166626,
+        "final_projection_layer": 0.3745957612991333
+      }
+    },
+    "L=0.3": {
+      "divergence": {
+        "lifting_layer": 0.3700387179851532,
+        "encoder_level_0": 0.7122913002967834,
+        "encoder_level_1": 0.525734543800354,
+        "encoder_level_2": 0.33518412709236145,
+        "bottleneck_0": 0.34266015887260437,
+        "bottleneck_1": 0.35986101627349854,
+        "bottleneck_2": 0.3474302589893341,
+        "decoder_level_0": 0.25625237822532654,
+        "decoder_level_1": 0.23045958578586578,
+        "decoder_level_2": 0.32784420251846313,
+        "final_projection_layer": 0.38975998759269714
+      }
+    },
+    "L=0.4": {
+      "divergence": {
+        "lifting_layer": 0.0,
+        "encoder_level_0": 0.0,
+        "encoder_level_1": 0.0,
+        "encoder_level_2": 0.0,
+        "bottleneck_0": 0.0,
+        "bottleneck_1": 0.0,
+        "bottleneck_2": 0.0,
+        "decoder_level_0": 0.0,
+        "decoder_level_1": 0.0,
+        "decoder_level_2": 0.0,
+        "final_projection_layer": 0.0
+      }
+    },
+    "L=0.6": {
+      "divergence": {
+        "lifting_layer": 0.299798846244812,
+        "encoder_level_0": 0.5950962901115417,
+        "encoder_level_1": 0.48162317276000977,
+        "encoder_level_2": 0.3202964961528778,
+        "bottleneck_0": 0.3231264650821686,
+        "bottleneck_1": 0.33818745613098145,
+        "bottleneck_2": 0.32886236906051636,
+        "decoder_level_0": 0.22182630002498627,
+        "decoder_level_1": 0.22969186305999756,
+        "decoder_level_2": 0.31260693073272705,
+        "final_projection_layer": 0.31592875719070435
+      }
+    },
+    "L=0.8": {
+      "divergence": {
+        "lifting_layer": 0.324775755405426,
+        "encoder_level_0": 0.7065288424491882,
+        "encoder_level_1": 0.5973858833312988,
+        "encoder_level_2": 0.34717410802841187,
+        "bottleneck_0": 0.3643559217453003,
+        "bottleneck_1": 0.38831377029418945,
+        "bottleneck_2": 0.3818550407886505,
+        "decoder_level_0": 0.223922997713089,
+        "decoder_level_1": 0.23925988376140594,
+        "decoder_level_2": 0.35553842782974243,
+        "final_projection_layer": 0.33187249302864075
+      }
+    },
+    "L=1.0": {
+      "divergence": {
+        "lifting_layer": 0.2728654146194458,
+        "encoder_level_0": 0.56722491979599,
+        "encoder_level_1": 0.5079194903373718,
+        "encoder_level_2": 0.3743526041507721,
+        "bottleneck_0": 0.3706803619861603,
+        "bottleneck_1": 0.3804062604904175,
+        "bottleneck_2": 0.3713195025920868,
+        "decoder_level_0": 0.2713196575641632,
+        "decoder_level_1": 0.28029125928878784,
+        "decoder_level_2": 0.3619467318058014,
+        "final_projection_layer": 0.3419070541858673
+      }
+    }
+  },
+  "L=0.8": {
+    "L=0.1": {
+      "divergence": {
+        "lifting_layer": 0.7051558494567871,
+        "encoder_level_0": 2.0374677181243896,
+        "encoder_level_1": 1.2059799432754517,
+        "encoder_level_2": 0.7727969288825989,
+        "bottleneck_0": 0.6111943125724792,
+        "bottleneck_1": 0.5225210785865784,
+        "bottleneck_2": 0.44964852929115295,
+        "decoder_level_0": 0.8273373246192932,
+        "decoder_level_1": 0.736344575881958,
+        "decoder_level_2": 0.7626380324363708,
+        "final_projection_layer": 0.9561150074005127
+      }
+    },
+    "L=0.2": {
+      "divergence": {
+        "lifting_layer": 0.6655023097991943,
+        "encoder_level_0": 1.524827480316162,
+        "encoder_level_1": 1.1485841274261475,
+        "encoder_level_2": 0.7804104685783386,
+        "bottleneck_0": 0.5849213004112244,
+        "bottleneck_1": 0.49488532543182373,
+        "bottleneck_2": 0.4249352216720581,
+        "decoder_level_0": 0.6199243664741516,
+        "decoder_level_1": 0.45275241136550903,
+        "decoder_level_2": 0.5988499522209167,
+        "final_projection_layer": 0.7526227235794067
+      }
+    },
+    "L=0.3": {
+      "divergence": {
+        "lifting_layer": 0.6658954620361328,
+        "encoder_level_0": 1.323877215385437,
+        "encoder_level_1": 0.9792478680610657,
+        "encoder_level_2": 0.7395627498626709,
+        "bottleneck_0": 0.5900183320045471,
+        "bottleneck_1": 0.5213390588760376,
+        "bottleneck_2": 0.460777223110199,
+        "decoder_level_0": 0.5548970699310303,
+        "decoder_level_1": 0.41233959794044495,
+        "decoder_level_2": 0.54783034324646,
+        "final_projection_layer": 0.6819761395454407
+      }
+    },
+    "L=0.4": {
+      "divergence": {
+        "lifting_layer": 0.6537924408912659,
+        "encoder_level_0": 1.1275023221969604,
+        "encoder_level_1": 0.8305473327636719,
+        "encoder_level_2": 0.6835836172103882,
+        "bottleneck_0": 0.6592071652412415,
+        "bottleneck_1": 0.6449227929115295,
+        "bottleneck_2": 0.5943015217781067,
+        "decoder_level_0": 0.6495379209518433,
+        "decoder_level_1": 0.5067806839942932,
+        "decoder_level_2": 0.6666256785392761,
+        "final_projection_layer": 0.8071818351745605
+      }
+    },
+    "L=0.6": {
+      "divergence": {
+        "lifting_layer": 0.5767830610275269,
+        "encoder_level_0": 0.8986985683441162,
+        "encoder_level_1": 0.6157916784286499,
+        "encoder_level_2": 0.47298887372016907,
+        "bottleneck_0": 0.4897799789905548,
+        "bottleneck_1": 0.5002800822257996,
+        "bottleneck_2": 0.45859673619270325,
+        "decoder_level_0": 0.4302459955215454,
+        "decoder_level_1": 0.38069042563438416,
+        "decoder_level_2": 0.5211654901504517,
+        "final_projection_layer": 0.5446170568466187
+      }
+    },
+    "L=0.8": {
+      "divergence": {
+        "lifting_layer": 0.0,
+        "encoder_level_0": 0.0,
+        "encoder_level_1": 0.0,
+        "encoder_level_2": 0.0,
+        "bottleneck_0": 0.0,
+        "bottleneck_1": 0.0,
+        "bottleneck_2": 0.0,
+        "decoder_level_0": 0.0,
+        "decoder_level_1": 0.0,
+        "decoder_level_2": 0.0,
+        "final_projection_layer": 0.0
+      }
+    },
+    "L=1.0": {
+      "divergence": {
+        "lifting_layer": 0.5082182884216309,
+        "encoder_level_0": 0.780814528465271,
+        "encoder_level_1": 0.5297643542289734,
+        "encoder_level_2": 0.38749611377716064,
+        "bottleneck_0": 0.3880675435066223,
+        "bottleneck_1": 0.38871508836746216,
+        "bottleneck_2": 0.36447644233703613,
+        "decoder_level_0": 0.36773809790611267,
+        "decoder_level_1": 0.3566242754459381,
+        "decoder_level_2": 0.44909968972206116,
+        "final_projection_layer": 0.4306996464729309
+      }
+    }
+  }
+}
